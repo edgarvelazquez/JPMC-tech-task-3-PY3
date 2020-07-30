@@ -1,0 +1,123 @@
+From 600b66cf9df9b41a5e2de2d416336a535c2f35c3 Mon Sep 17 00:00:00 2001
+From: edgar velazquez <edgar.ra.velazquez@gmail.com>
+Date: Wed, 29 Jul 2020 23:47:25 -0700
+Subject: [PATCH] Create Patch File
+
+---
+ src/DataManipulator.ts | 34 ++++++++++++++++++++++++----------
+ src/Graph.tsx          | 31 +++++++++++++++++++------------
+ 2 files changed, 43 insertions(+), 22 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index f6b15ff..3e17c48 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,34 @@
+ import { ServerRespond } from './DataStreamer';
+ 
++//added values to show dessired graph analysis
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
+-  timestamp: Date,
++    price_abc: number,
++    price_def: number,
++    ratio: number,
++    timestamp: Date,
++    upper_bound: number,
++    lower_bound: number,
++    trigger_alert: number | undefined,
+ }
+ 
+-
++//modified values to react to numerical changes specifically the upper bound and lower bound trigger
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]): Row[] {
+-    return serverResponds.map((el: any) => {
++  static generateRow(serverRespond: ServerRespond[]): Row {
++      const priceABC = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price) / 2;
++      const priceDEF = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price) / 2;
++      const ratio = priceABC / priceDEF;
++      const upperBound = 1 + 0.01; //this numbers can vary according to user, but 0.02 allows to see a clearer trigger alert on given data
++      const lowerBound = 1 - 0.01;
+       return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
++          price_abc: priceABC,
++          price_def: priceDEF,
++          ratio,
++          timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
++              serverRespond[0].timestamp : serverRespond[1].timestamp,
++          upper_bound: upperBound,
++          lower_bound: lowerBound,
++          trigger_alert: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined,
+       };
+-    })
++    
+   }
+ }
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 4c16dab..433c5f3 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -25,37 +25,44 @@ class Graph extends Component<IProps, {}> {
+     // Get element from the DOM.
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
++    //updated to track ratio between stocks instead simple distinction 
+     const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      price_abc: 'float',
++      price_def: 'float',
++      ratio: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+       this.table = window.perspective.worker().table(schema);
+-    }
++      }
++    //changing graph configuration to show ratio, lower bound, upper bound, and trigger alert
+     if (this.table) {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio","lower_bound", "upper_bound", "trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
+-        timestamp: 'distinct count',
++          price_abc: 'avg',
++          price_def: 'avg',
++          ratio: 'avg',
++          timestamp: 'distinct count',
++          upper_bound: 'avg',
++          lower_bound: 'avg',
++          trigger_alert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([ //little modification to support previous changes
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ]);
+     }
+   }
+ }
+-- 
+2.27.0.windows.1
+
